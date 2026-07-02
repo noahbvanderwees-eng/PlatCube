@@ -30,6 +30,13 @@
     -webkit-tap-highlight-color: transparent; user-select: none; touch-action: none; backdrop-filter: blur(2px);
     transition: transform .08s, background .08s; }
   .scoutBtn:active, .scoutBtn.held { background: rgba(53,224,122,.5); border-color: #35e07a; transform: scale(0.92); }
+  #pauseBtn { position: absolute; right: 14px; bottom: 14px; display: none; z-index: 5;
+    width: 50px; height: 50px; border-radius: 50%; border: 2px solid rgba(255,255,255,.45);
+    background: rgba(10,15,30,.45); color: #fff; font-size: 20px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; user-select: none; backdrop-filter: blur(2px);
+    transition: transform .08s, background .08s; }
+  #pauseBtn.show { display: block; }
+  #pauseBtn:active { background: rgba(255,255,255,.25); transform: scale(0.92); }
   #topbar { display: flex; align-items: center; gap: 12px; }
   #progressWrap { flex: 1; height: 12px; border-radius: 8px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); overflow: hidden; }
   #progressFill { height: 100%; width: 0%; background: linear-gradient(90deg, #35e07a, #7b2ff7); transition: width .08s linear; }
@@ -126,6 +133,7 @@
     <button id="scoutBack" class="scoutBtn" aria-label="Rewind">◀</button>
     <button id="scoutFwd" class="scoutBtn" aria-label="Forward">▶</button>
   </div>
+  <button id="pauseBtn" aria-label="Pause">⏸</button>
   <div id="overlay"></div>
 </div>
 
@@ -145,6 +153,7 @@
   const scoutControls = document.getElementById('scoutControls');
   const scoutBackBtn = document.getElementById('scoutBack');
   const scoutFwdBtn = document.getElementById('scoutFwd');
+  const pauseBtn = document.getElementById('pauseBtn');
 
   const W = 960, H = 540;
   function resize(){ const dpr = Math.min(window.devicePixelRatio||1,2); canvas.width=W*dpr; canvas.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
@@ -508,6 +517,13 @@
   bindScoutBtn(scoutBackBtn, 'ArrowLeft');
   bindScoutBtn(scoutFwdBtn, 'ArrowRight');
 
+  // On-screen pause button (bottom-right) — same behavior as the Esc/P keys: pauses in normal
+  // play, exits back to the level list in Scout mode (Scout has no pause screen).
+  pauseBtn.addEventListener('click', ()=>{
+    if(scoutMode) showLevels(true);
+    else togglePause();
+  });
+
   // ---------- Collision ----------
   const screenX = wx => wx - scrollX;
   function sign(ax,ay,bx,by,cx,cy){ return (ax-cx)*(by-cy)-(bx-cx)*(ay-cy); }
@@ -806,6 +822,7 @@
     if(state==='playing') update(dt);
     else { stepParticles(dt); if(shake>0) shake=Math.max(0,shake-60*dt); if(state==='dead'&&shock>0) shock+=dt*2.6; }
     scoutControls.classList.toggle('show', scoutMode && state==='playing');
+    pauseBtn.classList.toggle('show', state==='playing');
     render(); requestAnimationFrame(loop); }
   requestAnimationFrame(loop);
 
