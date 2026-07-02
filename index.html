@@ -23,6 +23,13 @@
 
   #hud { position: absolute; inset: 0; pointer-events: none; display: none; flex-direction: column; justify-content: space-between; padding: 14px 18px; }
   #hud.show { display: flex; }
+  #scoutControls { position: absolute; left: 14px; bottom: 14px; display: none; gap: 10px; z-index: 5; }
+  #scoutControls.show { display: flex; }
+  .scoutBtn { width: 58px; height: 58px; border-radius: 16px; border: 2px solid rgba(255,255,255,.45);
+    background: rgba(10,15,30,.45); color: #fff; font-size: 26px; font-weight: 800; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; user-select: none; touch-action: none; backdrop-filter: blur(2px);
+    transition: transform .08s, background .08s; }
+  .scoutBtn:active, .scoutBtn.held { background: rgba(53,224,122,.5); border-color: #35e07a; transform: scale(0.92); }
   #topbar { display: flex; align-items: center; gap: 12px; }
   #progressWrap { flex: 1; height: 12px; border-radius: 8px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); overflow: hidden; }
   #progressFill { height: 100%; width: 0%; background: linear-gradient(90deg, #35e07a, #7b2ff7); transition: width .08s linear; }
@@ -115,6 +122,10 @@
     </div>
     <div id="attempts">Attempt 1</div>
   </div>
+  <div id="scoutControls">
+    <button id="scoutBack" class="scoutBtn" aria-label="Rewind">◀</button>
+    <button id="scoutFwd" class="scoutBtn" aria-label="Forward">▶</button>
+  </div>
   <div id="overlay"></div>
 </div>
 
@@ -131,6 +142,9 @@
   const timerEl = document.getElementById('timer');
   const attemptsEl = document.getElementById('attempts');
   const wrap = document.getElementById('wrap');
+  const scoutControls = document.getElementById('scoutControls');
+  const scoutBackBtn = document.getElementById('scoutBack');
+  const scoutFwdBtn = document.getElementById('scoutFwd');
 
   const W = 960, H = 540;
   function resize(){ const dpr = Math.min(window.devicePixelRatio||1,2); canvas.width=W*dpr; canvas.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
@@ -395,15 +409,19 @@
   let attempts=1, scrollX=0, cube, particles=[], lastT=0, shake=0;
   let mode='cube', holding=false, waveTrail=[], cubeTrail=[], shock=0, deathPos={x:0,y:0}, scoutMode=false, moving=true;
   let runCoins=0, scoutWallHit=false, curDir=1;
-  const CUBE_TRAIL_LIFE=0.35, WAVE_TRAIL_LIFE=0.4;   // seconds a trail segment stays visible before vanishing
+  const CUBE_TRAIL_LIFE=0.35;   // seconds a cube trail segment stays visible before vanishing
+  const WAVE_TRAIL_MAX=500;     // wave trail never fades on a timer — it just caps out at this many points
 
-  // Shared trail stepper: existing points always age out at a fixed rate (so the trail keeps
-  // vanishing at the same pace whether you're moving or stopped); points only shift sideways
-  // by the actual travel direction (so reversing correctly puts the trail on the other side),
-  // and a new point is only born while there's momentum.
-  function stepTrail(trail, dt, headX, headY, life){
+  // Shared trail stepper. Cube trail (life set): points always age out at a fixed rate, so it keeps
+  // vanishing at the same pace whether you're moving or stopped. Wave trail (maxPoints set instead):
+  // points never age out — the trail only shrinks by hitting the point cap (effectively never, for a
+  // normal run) or by switchMode() clearing it outright when you turn back into a cube. Either way,
+  // points only shift sideways by the actual travel direction (reversing puts the trail on the other
+  // side), and a new point is only born while there's momentum.
+  function stepTrail(trail, dt, headX, headY, life, maxPoints){
     for(const p of trail){ p.x -= speed*dt*curDir; p.age += dt; }
-    while(trail.length && trail[0].age > life) trail.shift();
+    if(maxPoints) { while(trail.length > maxPoints) trail.shift(); }
+    else { while(trail.length && trail[0].age > life) trail.shift(); }
     if(moving) trail.push({x:headX, y:headY, age:0});
   }
 
@@ -455,22 +473,40 @@
     else if(state==='paused'){ state='playing'; overlay.classList.add('hidden'); lastT=performance.now(); }
   }
   const JUMP_KEYS=['Space','ArrowUp','KeyW'];
+  const KEY_ALIAS = { KeyA:'ArrowLeft', KeyD:'ArrowRight', KeyS:'ArrowDown' };   // A=←  D=→  S=↓
   window.addEventListener('keydown', e=>{
     keys[e.code]=true;
+    if(KEY_ALIAS[e.code]) keys[KEY_ALIAS[e.code]]=true;
     if(e.code==='Escape'||e.code==='KeyP'){
       if(scoutMode && state==='playing'){ e.preventDefault(); showLevels(true); }        // exit Scout
       else if(state==='playing'||state==='paused'){ e.preventDefault(); togglePause(); }
       return;
     }
-    if(['ArrowLeft','ArrowRight','ArrowDown'].includes(e.code)) e.preventDefault();          // creator scrub keys
+    if(['ArrowLeft','ArrowRight','ArrowDown','KeyA','KeyD','KeyS'].includes(e.code)) e.preventDefault();  // scrub keys
     if(JUMP_KEYS.includes(e.code)){ e.preventDefault(); press(); }
   });
-  window.addEventListener('keyup', e=>{ keys[e.code]=false; if(JUMP_KEYS.includes(e.code)) release(); });
+  window.addEventListener('keyup', e=>{
+    keys[e.code]=false;
+    if(KEY_ALIAS[e.code]) keys[KEY_ALIAS[e.code]]=false;
+    if(JUMP_KEYS.includes(e.code)) release();
+  });
   wrap.addEventListener('mousedown', e=>{ if(e.target.closest('button,.lvlCard,.sw,.cubeCell')) return; if(state==='playing'||state==='gameover') press(); });
   window.addEventListener('mouseup', release);
   wrap.addEventListener('touchstart', e=>{ if(e.target.closest('button,.lvlCard,.sw,.cubeCell')) return; if(state==='playing'||state==='gameover'){ e.preventDefault(); press(); } }, {passive:false});
   window.addEventListener('touchend', release);
   window.addEventListener('touchcancel', release);
+
+  // ---------- Scout on-screen forward/back buttons (mobile) — no on-screen jump button needed,
+  // tapping anywhere else on the screen already jumps via the wrap mousedown/touchstart above.
+  function bindScoutBtn(btn, keyCode){
+    const on = e=>{ e.preventDefault(); keys[keyCode]=true; btn.classList.add('held'); };
+    const off = ()=>{ keys[keyCode]=false; btn.classList.remove('held'); };
+    btn.addEventListener('mousedown', on);
+    btn.addEventListener('touchstart', on, {passive:false});
+    ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>btn.addEventListener(ev, off));
+  }
+  bindScoutBtn(scoutBackBtn, 'ArrowLeft');
+  bindScoutBtn(scoutFwdBtn, 'ArrowRight');
 
   // ---------- Collision ----------
   const screenX = wx => wx - scrollX;
@@ -613,7 +649,7 @@
     }
     collectCoinsBox(pxL, pyT, pxR, pyB);
     // trail: always keeps fading out, even while stopped
-    stepTrail(waveTrail, dt, cube.x+CUBE/2, cube.y+15, WAVE_TRAIL_LIFE);
+    stepTrail(waveTrail, dt, cube.x+CUBE/2, cube.y+15, 0, WAVE_TRAIL_MAX);
   }
   function stepParticles(dt){ for(const p of particles){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=900*dt; p.life-=dt; } particles=particles.filter(p=>p.life>0); }
   function fmt(s){ s=Math.max(0,s); const m=Math.floor(s/60), ss=Math.floor(s%60); return m+':'+String(ss).padStart(2,'0'); }
@@ -747,7 +783,7 @@
     ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.shadowColor=col; ctx.shadowBlur=8;
     for(let i=1;i<waveTrail.length;i++){
       const a=waveTrail[i-1], b=waveTrail[i];
-      const f=Math.max(0,1-b.age/WAVE_TRAIL_LIFE);   // f: 1 at birth -> 0 as it ages out (fades whether moving or not)
+      const f=i/waveTrail.length;   // f: tapers by position, not time — the trail itself never disappears, only clears on switchMode
       ctx.globalAlpha=0.15+f*0.75; ctx.strokeStyle=col; ctx.lineWidth=1.5+f*11;
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
     }
@@ -769,6 +805,7 @@
   function loop(t){ let dt=(t-lastT)/1000; lastT=t; if(dt>0.033) dt=0.033;
     if(state==='playing') update(dt);
     else { stepParticles(dt); if(shake>0) shake=Math.max(0,shake-60*dt); if(state==='dead'&&shock>0) shock+=dt*2.6; }
+    scoutControls.classList.toggle('show', scoutMode && state==='playing');
     render(); requestAnimationFrame(loop); }
   requestAnimationFrame(loop);
 
@@ -812,7 +849,7 @@
       <h1 class="title">${creator?'SCOUT MODE':'SELECT LEVEL'}</h1>
       <div class="levelGrid">${cards}</div>
       <button class="btn ghost" id="backBtn">← Back</button>
-      ${creator ? '<div class="miniHint">Scout mode · → forward · ← rewind · ↓ stop · Space/W jump · blocks are solid walls · no death · Esc exit</div>'
+      ${creator ? '<div class="miniHint">Scout mode · →/D forward · ←/A rewind · ↓/S stop · tap screen to jump · on-screen ◀▶ buttons for mobile · blocks are solid walls · no death · Esc exit</div>'
                  : '<div class="miniHint">Beat a level to unlock the next.</div>'}`);
     overlay.querySelectorAll('.lvlCard').forEach(el=>{
       if(el.dataset.locked==='true') return;                        // locked cards aren't clickable
