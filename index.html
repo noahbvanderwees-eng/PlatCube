@@ -115,6 +115,12 @@
   .cubeCell.sel { border-color:#fff; box-shadow:0 0 0 2px rgba(0,0,0,.5), 0 0 12px rgba(255,255,255,.7); }
   .previewText { font-weight:800; margin: 2px 0; }
   .miniHint { font-size:12px; opacity:.65; }
+  .cheatInput { position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+    width:110px; padding:4px 8px; font-size:11px; text-align:center; letter-spacing:2px;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); border-radius:6px;
+    color:rgba(255,255,255,.4); outline:none; transition:border-color .3s, color .3s; }
+  .cheatInput:focus { background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.3); color:#fff; }
+  .cheatInput.ok { border-color:#35e07a !important; color:#35e07a !important; }
 </style>
 </head>
 <body>
@@ -465,6 +471,7 @@
   function saveProgress(){ try{ localStorage.setItem('cubeDashProgress', JSON.stringify(PROGRESS)); }catch(e){} }
   function recordPct(idx,pct){ if(pct>PROGRESS.best[idx]){ PROGRESS.best[idx]=pct; saveProgress(); } }
   function unlockNext(idx){ if(idx+1>PROGRESS.unlocked){ PROGRESS.unlocked=idx+1; saveProgress(); } }
+  const CHEAT_CODE = 'nbvvdw2012';   // typed at the bottom of the start screen — unlocks every level
 
   function resetRun(){ scrollX=0; particles=[]; waveTrail=[]; cubeTrail=[]; shake=0; shock=0; runCoins=0; mode='cube'; holding=false; cube={x:160,y:GROUND_Y-CUBE,vy:0,onGround:true,angle:0}; }
   function startGame(idx, creator){
@@ -863,10 +870,22 @@
         <button class="btn big" id="playBtn">START</button>
         <button class="btn ghost" id="creatorBtn">🔭 Scout — all levels</button>
         <div class="miniHint">Space / ↑ / Click to jump · Esc/P to pause · every level is 1:30</div>
-      </div>`);
+      </div>
+      <input type="password" id="cheatInput" class="cheatInput" autocomplete="off" spellcheck="false">`);
     document.getElementById('playBtn').onclick=()=>showLevels(false);
     document.getElementById('creatorBtn').onclick=()=>showLevels(true);   // test any level, no locks
     document.getElementById('decorBtn').onclick=showDecorator;
+    const cheatEl = document.getElementById('cheatInput');
+    cheatEl.addEventListener('keydown', e=>{
+      if(e.key!=='Enter') return;
+      if(cheatEl.value===CHEAT_CODE){
+        PROGRESS.unlocked = LEVEL_NAMES.length-1; saveProgress();
+        cheatEl.classList.add('ok'); cheatEl.value='✓';
+        setTimeout(()=>{ cheatEl.value=''; cheatEl.classList.remove('ok'); cheatEl.blur(); }, 1000);
+      } else {
+        cheatEl.value='';
+      }
+    });
     document.getElementById('textBtn').onclick=showTextStyle;
   }
 
