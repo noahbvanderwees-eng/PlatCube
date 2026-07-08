@@ -819,15 +819,26 @@
     ctx.strokeStyle='rgba(0,0,0,.8)'; ctx.lineWidth=2; ctx.strokeRect(-CUBE/2,-CUBE/2,CUBE,CUBE); ctx.restore();
   }
   function waveColor(){ return CONFIG.wave; }   // customizable in the Decorator
+  // Wave trail can persist for hundreds of points (it never fades on a timer, only clears on
+  // switchMode). Stroking every segment individually — worse, with shadowBlur active on each one
+  // — is what was causing the lag. Batch it into a handful of buckets instead: each bucket is one
+  // connected polyline drawn with a single stroke() call, and the glow is skipped on the trail body
+  // entirely (the wave dart itself still glows, drawn separately, just once per frame).
   function drawWaveTrail(){
-    if(waveTrail.length<2) return;
+    const n = waveTrail.length;
+    if(n<2) return;
     const col=waveColor();
-    ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.shadowColor=col; ctx.shadowBlur=8;
-    for(let i=1;i<waveTrail.length;i++){
-      const a=waveTrail[i-1], b=waveTrail[i];
-      const f=i/waveTrail.length;   // f: tapers by position, not time — the trail itself never disappears, only clears on switchMode
-      ctx.globalAlpha=0.15+f*0.75; ctx.strokeStyle=col; ctx.lineWidth=1.5+f*11;
-      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle=col;
+    const BUCKETS = Math.min(12, n-1);
+    for(let b=0; b<BUCKETS; b++){
+      const startI = Math.floor(b/BUCKETS*(n-1))+1;
+      const endI = Math.floor((b+1)/BUCKETS*(n-1))+1;
+      if(startI>=endI) continue;
+      const f = (b+0.5)/BUCKETS;   // representative fade for this whole bucket: 0 tail -> 1 head
+      ctx.globalAlpha=0.15+f*0.75; ctx.lineWidth=1.5+f*11;
+      ctx.beginPath(); ctx.moveTo(waveTrail[startI-1].x, waveTrail[startI-1].y);
+      for(let i=startI;i<endI;i++) ctx.lineTo(waveTrail[i].x, waveTrail[i].y);
+      ctx.stroke();
     }
     ctx.restore();
   }
