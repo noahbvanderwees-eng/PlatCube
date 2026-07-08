@@ -471,7 +471,7 @@
   function saveProgress(){ try{ localStorage.setItem('cubeDashProgress', JSON.stringify(PROGRESS)); }catch(e){} }
   function recordPct(idx,pct){ if(pct>PROGRESS.best[idx]){ PROGRESS.best[idx]=pct; saveProgress(); } }
   function unlockNext(idx){ if(idx+1>PROGRESS.unlocked){ PROGRESS.unlocked=idx+1; saveProgress(); } }
-  const CHEAT_CODE = 'nbvvdw2012';   // typed at the bottom of the start screen — unlocks every level
+  const CHEAT_CODE = 'inventorN';   // typed at the bottom of the start screen — unlocks every level
 
   function resetRun(){ scrollX=0; particles=[]; waveTrail=[]; cubeTrail=[]; shake=0; shock=0; runCoins=0; mode='cube'; holding=false; cube={x:160,y:GROUND_Y-CUBE,vy:0,onGround:true,angle:0}; }
   function startGame(idx, creator){
