@@ -252,7 +252,10 @@
         const h = [40,60,80][Math.floor(rng()*3)];
         o.push({type:'block',x,w:60,h}); adv = 60;
       } else {
-        const hy = 110 + Math.floor(rng()*4)*12;
+        // Cube's max jump rise is v²/(2·g) = 820²/4800 ≈ 140px. Keep every tier comfortably under
+        // that (with margin for the horizontal timing needed to actually land on an 80px platform),
+        // so every floating platform — and any coin sitting on one — is reliably reachable.
+        const hy = 75 + Math.floor(rng()*4)*15;   // 75 / 90 / 105 / 120
         o.push({type:'highblock',x,w:80,h:26,y:GROUND_Y-hy}); adv = 80;
       }
       const gapTime = (1.15 - 0.30*t) + rng()*0.20;  // more reaction time at every difficulty
@@ -311,19 +314,35 @@
   // every other floating platform gets a spike on top instead. If a level doesn't have 5 floating
   // platforms (e.g. an all-tunnel level), the remainder are placed as standalone coins along the
   // tunnel's centreline (or a fallback height) so every level always has exactly 5.
-  function finalizeCoins(meta, rng){
+  //
+  // A couple of specific platform coins (found by playtesting) sat awkwardly even after the jump-
+  // height fix above — RELOCATE_PCT swaps that platform's coin for a spike and relocates the coin
+  // into the wave section instead, on levels keyed by index.
+  const RELOCATE_PCT = { 0: 0.74, 1: 0.26 };   // Central: coin near 74% -> wave. Cortex: coin near 26% -> wave.
+  function finalizeCoins(meta, rng, levelIdx){
     const o = meta.obstacles;
     const tiles = o.filter(ob => ob.type==='highblock' && !ob.wave);
     const idxs = tiles.map((_,i)=>i);
     for(let i=idxs.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [idxs[i],idxs[j]]=[idxs[j],idxs[i]]; }
-    const coinCount = Math.min(5, tiles.length);
+    let coinCount = Math.min(5, tiles.length);
     const coinSet = new Set(idxs.slice(0,coinCount));
+
+    let relocated = 0;
+    const targetPct = RELOCATE_PCT[levelIdx];
+    if(targetPct !== undefined && coinSet.size){
+      const targetX = meta.endX * targetPct;
+      let bestI=-1, bestDist=Infinity;
+      coinSet.forEach(i=>{ const cx=tiles[i].x+tiles[i].w/2; const d=Math.abs(cx-targetX); if(d<bestDist){ bestDist=d; bestI=i; } });
+      if(bestI>=0){ coinSet.delete(bestI); relocated=1; }
+    }
+
     tiles.forEach((tile,i)=>{
       const cx = tile.x + tile.w/2;
       if(coinSet.has(i)) o.push({type:'coin', x:cx, y:tile.y-18, r:13});   // low enough to grab right off the platform, no risky jump
       else o.push({type:'topspike', x:cx-23, baseY:tile.y});
     });
-    let extra = 5 - coinCount;
+    // extra: how many coins still need a home off-platform (from too few platforms, or a relocation)
+    let extra = 5 - coinSet.size;
     if(extra>0){
       const tun = o.find(ob=>ob.type==='tunnel');
       for(let k=0;k<extra;k++){
@@ -353,7 +372,7 @@
       // ---- Maelstrom: pure, difficult wave from start to finish ----
       portals.push({x:-100, mode:'wave'});                  // wave from the very first frame
       buildTunnel(o, 520, endX-500, speed, {gap:200, period:340});
-      finalizeCoins(meta, rng); return meta;
+      finalizeCoins(meta, rng, idx); return meta;
     }
 
     if (idx === 9){
@@ -370,7 +389,7 @@
       const endJumpX = endX - 1200;
       x = fillCube(o, x, endJumpX - 260, rng, t, speed);     // cube section
       addOneFrameJump(o, endJumpX);                          // one-frame jump at the END
-      finalizeCoins(meta, rng); return meta;
+      finalizeCoins(meta, rng, idx); return meta;
     }
 
     // ---- Every other level: cube → WAVE section (>=40% of the level) → cube ----
@@ -386,7 +405,7 @@
     portals.push({x: waveEnd + 60, mode:'cube'});
     x = waveEnd + 360;
     fillCube(o, x, endX - 600, rng, t, speed);
-    finalizeCoins(meta, rng); return meta;
+    finalizeCoins(meta, rng, idx); return meta;
   }
 
   // ---------- Polka-dot background ----------
